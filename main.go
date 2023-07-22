@@ -5,6 +5,7 @@ import (
 	"context"
 	"image/jpeg"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -12,14 +13,16 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/joho/godotenv"
 	"github.com/nfnt/resize"
 )
 
-// Handler resizes the image from the source bucket and saves it to the destination bucket.
 func Handler(ctx context.Context, event events.S3Event) {
-	// Create an AWS session with the desired region
+
+	awsZone := os.Getenv("AWS_ZONE")
+
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String("ap-southeast-2"),
+		Region: aws.String(awsZone),
 	}))
 
 	s3Client := s3.New(sess)
@@ -38,17 +41,14 @@ func Handler(ctx context.Context, event events.S3Event) {
 			return
 		}
 
-		// Decode the image
 		img, err := jpeg.Decode(obj.Body)
 		if err != nil {
 			log.Printf("Error decoding image %s: %v", key, err)
 			return
 		}
 
-		// Resize the image
 		newImg := resize.Resize(200, 0, img, resize.Lanczos3)
 
-		// Encode the resized image
 		var buf bytes.Buffer
 		err = jpeg.Encode(&buf, newImg, nil)
 		if err != nil {
@@ -56,8 +56,6 @@ func Handler(ctx context.Context, event events.S3Event) {
 			return
 		}
 
-		// Upload the resized image to a new object in the same bucket
-		// Replace "resized/" with the desired path in the bucket for resized images.
 		newKey := strings.Replace(key, "current/", "resized/", 1)
 		_, err = s3Client.PutObject(&s3.PutObjectInput{
 			Bucket: &bucket,
@@ -74,5 +72,10 @@ func Handler(ctx context.Context, event events.S3Event) {
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	log.SetFlags(log.LstdFlags | log.Llongfile)
 	lambda.Start(Handler)
 }
